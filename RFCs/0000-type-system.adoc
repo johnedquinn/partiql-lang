@@ -30,40 +30,42 @@ The PartiQL Team is currently working towards a long-term support (LTS) version 
 
 The remainder of this document aims to write itself in a way that will enable the PartiQL Maintainers to copy and paste its contents directly into the PartiQL Specification. That being said, this document has intentionally chosen to deviate from PartiQL's RFC template.
 
-== Data Types
+== PartiQL Data Types
 
-PartiQL inherits the following categories of pre-defined types from SQL:1999:
-[quote, SQL:1999]
-____
-— The data types CHARACTER, CHARACTER VARYING, and CHARACTER LARGE OBJECT are collectively referred to as character string types. +
-— The data types BIT and BIT VARYING are collectively referred to as bit string types. +
-— The data type BINARY LARGE OBJECT is referred to as the binary string type and the values of binary string types are referred to as binary strings. +
-— The data types CHARACTER LARGE OBJECT and BINARY LARGE OBJECT are collectively referred to as large object string types and the values of large object string types are referred to as large object strings. +
-— Character string types, bit string types, and binary string types are collectively referred to as string types and values of string types are referred to as strings. +
-— The data types NUMERIC, DECIMAL, INTEGER and SMALLINT are collectively referred to as exact numeric types. +
-— The data types FLOAT, REAL, and DOUBLE PRECISION are collectively referred to as approximate numeric types. +
-— Exact numeric types and approximate numeric types are collectively referred to as numeric types. Values of numeric types are referred to as numbers. +
-— The data types TIME WITHOUT TIME ZONE and TIME WITH TIME ZONE are collectively referred to as time types (or, for emphasis, as time with or without time zone). +
-— The data types TIMESTAMP WITHOUT TIME ZONE and TIMESTAMP WITH TIME ZONE are collectively referred to as timestamp types (or, for emphasis, as timestamp with or without time zone). +
-— The data types DATE, time, and timestamp are collectively referred to as datetime types. +
-— Values of datetime types are referred to as datetimes. +
-— The data type INTERVAL is referred to as an interval type. Values of interval types are called intervals.
-____
+=== Inherited Types
+
+As PartiQL is an extension of SQL:1999, PartiQL inherits the following types and type families from SQL:1999:
+
+- Character String Types (CHARACTER, CHARACTER VARYING, and CHARACTER LARGE OBJECT)
+- Bit String Types (BIT, BIT VARYING)
+- Binary String Types (BINARY LARGE OBJECT)
+- Large Object String Types (CHARACTER LARGE OBJECT, BINARY LARGE OBJECT)
+- String Types (Character String Types, Bit String Types, Binary String Types)
+- Exact Numeric Types (NUMERIC, DECIMAL, INTEGER, SMALLINT)
+- Approximate Numeric Types (FLOAT, REAL, DOUBLE PRECISION)
+- Numeric Types (Exact Numeric Types, Approximate Numeric Types)
+- Time Types (TIME WITHOUT TIME ZONE, TIME WITH TIME ZONE)
+- Timestamp Types (TIMESTAMP WITHOUT TIME ZONE, TIMESTAMP WITH TIME ZONE)
+- Datetime Types (DATE, Time Types, Timestamp Types)
+- Interval Type (INTERVAL)
+- Boolean Type (BOOLEAN)
+
+=== PartiQL-Specific Types
 
 Beyond these pre-defined types established by SQL:1999, PartiQL proposes additional types categorized as follows:
 
-- The data types ARRAY, BAG, and TUPLE are collectively referred to as complex types.
-- The data types ARRAY and BAG are collectively referred to as collection types.
+- The data types ARRAY, BAG, SEXP, and TUPLE are collectively referred to as complex types.
+- The data types ARRAY, SEXP, and BAG are collectively referred to as collection types.
 - The data type TUPLE is referred to as a tuple type.
-- The data types NULL and MISSING are collectively referred to as absent types.
-- The data type DYNAMIC is referred to as a dynamic type. There are no values that may be of the dynamic type.
 - The data types TINYINT, BIGINT, and UNBOUNDED INT are added to the definition of exact numeric types.
 - The data type SYMBOL is added to the definition of character string types.
-- And, since SQL:1999 did not categorize boolean types: The data type BOOLEAN is referred to as a boolean type.
+- The data type DYNAMIC is referred to as a dynamic type. There are no values that may be of the dynamic type.
 
 Subsequent sections in this RFC elaborate on the semantics of the above mentioned types.
 
-Below are the enumerated pre-defined PartiQL predefined data types:
+=== All Types (Enumerated)
+
+Below are the enumerated pre-defined PartiQL data types:
 
 [#data-types-table]
 .PartiQL Data Types
@@ -186,6 +188,95 @@ Below are the enumerated pre-defined PartiQL predefined data types:
 |===
 
 Above, in <<data-types-table>>, the options Y, M, and N correpond to the words YES, MODIFIED, and NO, respectively. If the entry contains MODIFIED, further sections shall establish how the corresponding type differs from that of SQL:1999. Similarly, if the entry contains NO, further sections shall introduce the data type. If the entry contains YES, this document shall not elaborate on the corresponding type, and readers shall refer to SQL:1999 for information regarding its syntax and semantics.
+
+== Absent Values
+
+In contrast with SQL:1999, every data type includes two special values, the null and missing values. These are denoted
+by the keywords NULL and MISSING, respectively. These values differ from other values in the following respects:
+
+- Since the absent values are in every data type, the data type of the absent value implied by the
+keywords NULL/MISSING cannot be inferred; hence NULL/MISSING can be used to denote the null/missing value only in
+certain contexts, rather than everywhere that a literal is permitted.
+- Although the absent values are neither equal to any other value nor not equal to any other value —
+it is unknown whether or not it is equal to any given value — in some contexts, multiple absent
+values are treated together; for example, the <group by clause> treats all absent values together.
+
+=== The Null Value
+
+In PartiQL, the null value behaves the same as in SQL:1999.
+
+=== The Missing Value
+
+.EBNF
+[%nowrap]
+[source,ebnf]
+----
+(* Literal *)
+<missing literal> ::=
+    MISSING
+----
+
+While SQL:1999 defines the null value to be "a special value that is used to indicate the absence of any data value." (SQL:1999 Part 1 Section 3.1.1), in today's world, NULL has garnered a definition more akin to "a literal absent value, which itself is not absent". In today's world, several data formats allow for the explicit use of NULL to create data -- which may lead to confusion regarding whether the data is present or not. For example, consider the following snippet of JSON (or Ion):
+----
+{
+    "a": 1,
+    "b": 2,
+    "c": NULL
+}
+----
+
+If one were to ask "Is `data.c` absent?", what might one say? Yes, the value it is pointed to is absent, however, the path described exists in the underlying data. If one were to ask "Is `data.z` absent?", one would have greater confidence that, yes, attribute `z` is truly absent.
+
+Hence, the missing value represents latent typing errors (occurring as a result of an operation such as the above) that have been coerced to an absent value. In the above, `data.z` would have resulted in a typing error, however, in PartiQL's permissive mode, this would be coerced to the missing value. Other scenarios that could potentially result in a missing value include the mistyping of functions, mistyping of the FROM source, and more. For more information, see link:https://github.com/partiql-lang/TODO[RFC-TODO].
+
+In both typing modes (strict and permissive), it is possible to create a MISSING literal.
+
+.Example Usage
+[%nowrap]
+[source,partiql]
+----
+SELECT VALUE t
+FROM <<
+    1,
+    MISSING,
+    3
+>> AS t
+----
+
+For information about MISSING and its semantics, see link:https://github.com/partiql-lang/TODO[RFC-TODO].
+
+
+=== Implications of Typed Absent Values
+
+NOTE: This section shall not be copied and pasted into the PartiQL Specification. Its purpose is solely to provide additional information to readers of this RFC.
+
+[quote]
+____
+MISSING is not a type. It is a value.
+____
+
+Whether or not an argument evaluates to the missing value has *zero* effect on the function that is statically resolved. Since the missing value is *not* a type, it has no say in the function that shall be resolved. Therefore, in our implementation of the planner, we shall not model "missable" types to be the union of some theoretical "missing type" and another type. All types are "missable" as the missing value belongs to all types.
+
+=== Type of Absent Literals
+
+Regarding literal null values:
+
+[quote, SQL:1999 Part 1]
+____
+Since the null value is in every data type, the data type of the null value implied by the
+keyword NULL cannot be inferred; hence NULL can be used to denote the null value only in
+certain contexts, rather than everywhere that a literal is permitted.
+____
+
+For literal missing values (denoted by the keyword MISSING), PartiQL prescribes the same rules that SQL:1999 prescribes for the null value.
+
+NOTE: PostgreSQL describes the `unknown` data type which is a placeholder for literal NULL values prior to resolving functions/operations. PartiQL implementations may choose a similar approach.
+
+=== Replacing Existing Functionality
+
+TODO: Internally, we can wrap StaticType with a flag: isMissingValue & isNullValue. That way, we can still throw the "is always missing" warning.
+
+TODO
 
 == Dynamic Type
 
@@ -317,7 +408,7 @@ ____
 ==========
 *Name*: TINYINT +
 *Aliases*: INT8 +
-*In SQL:1999*: NO
+*In SQL:1999*: NO +
 *Binary Precision*: 8
 ==========
 
@@ -328,7 +419,7 @@ The TINYINT type is a signed integer represented in 8 bits (1 byte).
 ==========
 *Name*: SMALLINT +
 *Aliases*: INT16 +
-*In SQL:1999*: MODIFIED
+*In SQL:1999*: MODIFIED +
 *Binary Precision*: 16
 ==========
 
@@ -339,7 +430,7 @@ In contrast to SQL:1999, PartiQL prescribes a specific binary precision to an SM
 ==========
 *Name*: INTEGER +
 *Aliases*: INT, INT32 +
-*In SQL:1999*: MODIFIED
+*In SQL:1999*: MODIFIED +
 *Binary Precision*: 32
 ==========
 
@@ -350,7 +441,7 @@ In contrast to SQL:1999, PartiQL prescribes a specific binary precision to an IN
 ==========
 *Name*: BIGINT +
 *Aliases*: LONG, INT64 +
-*In SQL:1999*: NO
+*In SQL:1999*: NO +
 *Binary Precision*: 64
 ==========
 
@@ -702,61 +793,6 @@ FROM [
 *Aliases*: STRUCT +
 *In SQL:1999*: NO
 ==========
-
-== Absent Types
-
-=== Null Type
-
-==========
-*Name*: NULL +
-*Aliases*: <None> +
-*In SQL:1999*: NO
-==========
-
-PartiQL supports distinct null values for every core type, as well as a separate null type that is distinct from all other types. The singular value that it may represent is the NULL value.
-
-An important aspect of the NULL type (and NULL value) is that it may be implicitly coerced into any other type.
-
-=== Missing Type
-
-==========
-*Name*: MISSING +
-*Aliases*: <None> +
-*In SQL:1999*: NO
-==========
-
-As elaborated by the pre-existing PartiQL Specification, the MISSING type is a mechanism by which PartiQL queries may handle typing errors during the runtime (if permitted by the typing mode). To elaborate, typing errors that would normally result in a halt of execution shall be coerced to the MISSING value when in permissive mode.
-
-The singular value that it may represent is the MISSING value. Note that, by default, all MISSING values are described as NOT NULL.
-
-In both typing modes (strict and permissive), it is possible to create a MISSING literal.
-
-.EBNF
-[%nowrap]
-[source,ebnf]
-----
-(* Type *)
-<missing type> ::=
-    MISSING
-
-(* Literal *)
-<missing literal> ::=
-    MISSING
-----
-
-.Example Usage
-[%nowrap]
-[source,partiql]
-----
-SELECT VALUE t
-FROM <<
-    1,
-    MISSING,
-    3
->> AS t
-----
-
-For information about MISSING and its semantics, see link:https://github.com/partiql-lang/TODO[RFC-TODO].
 
 == Other Types
 
